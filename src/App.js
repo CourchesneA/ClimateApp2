@@ -419,7 +419,7 @@ class App extends Component {
             </div>
           </main>}
           <footer className="App-footer">
-            <p>L. X. Zhu | A. Courchesne | J. C. Schwartz | N. Cowan | McGill University 2021 | <a href="https://climateapp.ca/public/Instructions.pdf">How does this work ?</a></p>
+            <p>L. X. Zhu | A. Courchesne | J. C. Schwartz | N. Cowan | McGill University 2021 | <a href="https://arxiv.org/pdf/2110.14087">How does this work ?</a></p>
           </footer>
         </div>
       );
@@ -509,7 +509,7 @@ class App extends Component {
           </div>
         </main>}
         <footer className="App-footer">
-          <p>L. X. Zhu | A. Courchesne | J. C. Schwartz | N. Cowan | Université McGill 2021 | <a href="https://climateapp.ca/public/Instructions.pdf">Comment ça marche ?</a></p>
+          <p>L. X. Zhu | A. Courchesne | J. C. Schwartz | N. Cowan | Université McGill 2021 | <a href="https://arxiv.org/pdf/2110.14087">Comment ça marche ?</a></p>
         </footer>
       </div>
     );
