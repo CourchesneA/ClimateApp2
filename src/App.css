@@ -10,7 +10,7 @@
 
 .App-header {
   background-color: #222;
-  height: 150px;
+  height: 170px;
   padding: 20px;
   color: white;
   width: 100%;
@@ -68,5 +68,12 @@
   margin-left: auto;
   margin-right: auto;
   /* width: 100%; */
+}
+
+.topcorner{
+  position:absolute;
+  top: 1%;
+  right: 0%;
+  z-index: 2
 }
 

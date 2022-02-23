@@ -1,5 +1,5 @@
 import React from 'react';
-import { getSurfaceTemp, getLayerTemp, getMaxSurfaceTemp, getMinSurfaceTemp, maxInsolation, minInsolation } from './Calc.js'
+import { getSurfaceTemp, getLayerTemp } from './Calc.js'
 
 // import { FaRegistered } from 'react-icons/fa';
 
@@ -30,6 +30,9 @@ class SimulationCanvas extends React.Component {
         const planetY = 1050;
         const planetRadius = 700;
 
+        const language = this.props.language;
+
+        const sbc = 5.670367e-8;
         const a = this.props.planetaryAlbedo;
         const s = this.props.stellarRadiation;
         const s0 = s*1361/4;
@@ -38,15 +41,40 @@ class SimulationCanvas extends React.Component {
         const e3 = typeof this.props.layers[2] === "undefined" ? 0 : this.props.layers[2].alpha;
         const ei = [e1,e2,e3]
 
+        var a_exist = true;
+
+        if ((typeof this.props.layers[0] === "undefined") && 
+            (typeof this.props.layers[1] === "undefined") &&
+            (typeof this.props.layers[2] === "undefined")){
+                a_exist = false;
+            }
+
+        //whether a certain layer exists, tf stands for true or false
+        const tf1 = typeof this.props.layers[0] === "undefined" ? 0 : 1;
+        const tf2 = typeof this.props.layers[0] === "undefined" ? 0 : 1;
+        const tf3 = typeof this.props.layers[0] === "undefined" ? 0 : 1;
+        const tfi = [tf1,tf2,tf3]
+
+               
+        const s1 = typeof this.props.layers[0] === "undefined" ? 0: this.props.layers[0].opa;
+        const s2 = typeof this.props.layers[1] === "undefined" ? 0: this.props.layers[1].opa;
+        const s3 = typeof this.props.layers[2] === "undefined" ? 0: this.props.layers[2].opa;
+        const si = [s1,s2,s3]
+
+        const a1 = typeof this.props.layers[0] === "undefined" ? 0: this.props.layers[0].sca;
+        const a2 = typeof this.props.layers[1] === "undefined" ? 0: this.props.layers[1].sca;
+        const a3 = typeof this.props.layers[2] === "undefined" ? 0: this.props.layers[2].sca;
+        const ai = [a1,a2,a3]
+
         const shortwaveColor = "#ffd11a"
         const longwaveColor = "#ff3333"
 
-        const surfaceTemp = getSurfaceTemp(a, s, e1, e2, e3)
+        const surfaceTemp = getSurfaceTemp(a, s, e1, e2, e3, s1, s2, s3, a1, a2, a3)
         var layerTemps = []
 
         for (let i = 0; i < 3; i++) {
             if (ei[i] !== 0) {
-                layerTemps[i] = getLayerTemp(i, a, s, ei)
+                layerTemps[i] = getLayerTemp(i, a, s, ei, si, ai)
             }
         }
 
@@ -55,45 +83,58 @@ class SimulationCanvas extends React.Component {
         // Clear the canvas to draw new simulation
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+        // Draw the Global (Thick) atmosphere
+        if (a_exist){
+            ctx.beginPath();
+            ctx.arc(planetX,planetY, planetRadius + 90 , -Math.PI, Math.PI)
+            ctx.strokeStyle = "#99ccff"
+        ctx.lineWidth = 250
+            ctx.stroke()
+        }
+
+
         // Draw the star
         ctx.beginPath();
         ctx.arc(-25,-100,175,0,3/2*Math.PI)
         ctx.fillStyle = shortwaveColor
         ctx.fill();
 
-        // Draw the planet
-        ctx.beginPath();
-        ctx.arc(planetX, planetY, planetRadius, -Math.PI, Math.PI);
-        ctx.fillStyle = getPlanetColor(a);
-        ctx.fill();
 
         // Draw stellar radiation arrow
-        drawArrow(ctx, 45, 65, 100, 335, getStellarWidth(s), shortwaveColor)
+        drawArrow(ctx, 18, 65, 30, 135, getStellarWidth(), shortwaveColor)
 
+        //Draw stellar radiation arrow after absorption
+        //From atm to ground is just d1 (down from layer 1)
+        drawArrow(ctx, 49,232, 68, 330, 
+            getAtmToGroundWidthFactor(s1, s2, s3, a1, a2, a3,a)*getStellarWidth(), shortwaveColor )
+//was 40 180
         // Draw reflected shortwave
+        //From ground to atm is just u0 (up from surface)
         if(a > 0){
-            drawArrow(ctx, 85, 355, 20, 270, getReflectedStellarWidth(s,a), shortwaveColor)
+            drawArrow(ctx, 100, 355, 116, 235, 
+                getStellarWidth()*getReflectedStellarWidth(s1, s2, s3, a1, a2, a3,a), shortwaveColor)
         }
+
+        //Draw shortwave from TOA to space
+        //u3
+        drawArrow (ctx, 122, 155, 132, 77, 
+            getEffectiveAlbedo(tfi, s1, s2, s3, a1, a2, a3,a)*getStellarWidth(),shortwaveColor)
+        
+
+        // Draw longwave atmospheric downward emission
+        drawArrow(ctx, 180, 215, 180, 320, getAtmosphericRadiationBotWidth(sbc, layerTemps,s0,ei), longwaveColor )
+        //drawArrow(ctx, 270, 155, 270, 40, getAtmosphericRadiationTopWidth(sbc,layerTemps, s0,ei), longwaveColor )
+
+        // Draw TOA to space longwave emission (TopWidth+escaping)
+        if((1-ei[0])*(1-ei[1])*(1-ei[2]) > 0 ){
+            drawArrow(ctx, 230, 150, 230, 50, getEscapingSurfaceEmissionWidth(sbc, surfaceTemp, s0, ei)+ getAtmosphericRadiationTopWidth(sbc,layerTemps, s0,ei), longwaveColor)
+        } else{
+            drawArrow(ctx, 230, 150, 230, 50, getAtmosphericRadiationTopWidth(sbc,layerTemps, s0,ei), longwaveColor)
+        }
+
 
         // Draw longwave planet emission
-        // drawArrow(ctx, 165, 352, 165, 235, getSurfaceEmissionWidth(surfaceTemp, s0), longwaveColor )
-        drawArrow(ctx, 165, 352, 165, 235, getLayerAbsorbedEmission(surfaceTemp, s0,ei), longwaveColor )
-
-        // Draw longwave planet emission that is not absorbed by atmosphere
-        if((1-ei[0])*(1-ei[1])*(1-ei[2]) > 0 ){
-            drawArrow(ctx, 215, 350, 215, 50, getEscapingSurfaceEmissionWidth(surfaceTemp, s0, ei), longwaveColor)
-        }
-
-        // Draw longwave atmospheric emission
-        drawArrow(ctx, 270, 200, 270, 290, getAtmosphericRadiationBotWidth(layerTemps, ei, s0), longwaveColor )
-        drawArrow(ctx, 270, 155, 270, 65, getAtmosphericRadiationTopWidth(layerTemps, ei, s0), longwaveColor )
-
-        // Draw the Global (Thick) atmosphere
-        ctx.beginPath();
-        ctx.arc(planetX,planetY, planetRadius + 170 , -Math.PI, Math.PI)
-        ctx.strokeStyle = "#99ccff"
-        ctx.lineWidth = 62
-        ctx.stroke()
+        drawArrow(ctx, 290, 362, 290, 280, getSurfaceEmissionWidth(sbc,surfaceTemp, s0), longwaveColor )
 
         // maxLayer = -1
         // Draw the multiple atmospheric layers
@@ -108,6 +149,11 @@ class SimulationCanvas extends React.Component {
                 ctx.stroke()
             }
         }
+        // Draw the planet
+        ctx.beginPath();
+        ctx.arc(planetX, planetY, planetRadius, -Math.PI, Math.PI);
+        ctx.fillStyle = getPlanetColor(a);
+        ctx.fill();
 
         // Clear space to output temperatures labels, not really necessary
         // if (maxLayer>=0){
@@ -130,6 +176,7 @@ class SimulationCanvas extends React.Component {
                 ctx.fillText("T" + unicodeSubscriptDict[i + 1] + "= " + layerTemps[i] + "K", tx, ty);
             }
         }
+        
 
         // Surface temperature label
         ctx.beginPath()
@@ -142,6 +189,21 @@ class SimulationCanvas extends React.Component {
         ctx.rect(tx - 10, ty - 17, 110, 20)
         ctx.stroke()
         ctx.fillText("T" + unicodeSubscriptDict[0] + "= " + surfaceTemp + "K", tx, ty);
+
+        // Equivalent albedo label
+        ctx.beginPath()
+        ctx.font="15px Arial"
+        ctx.fillStyle = "black";
+        if (! language){
+            ctx.fillText("Effective", 80, 50);
+            ctx.fillText(" albedo: ", 80, 65);//just making the two words
+            // to appear on different lines
+            ctx.fillText(getEffectiveAlbedo(tfi, s1,s2,s3,a1,a2,a3, a).toFixed(2), 137, 65);
+        }else{
+            ctx.fillText("Albédo", 83, 50);
+            ctx.fillText("effectif: ", 83, 65);
+            ctx.fillText(getEffectiveAlbedo(tfi, s1,s2,s3,a1,a2,a3, a).toFixed(2).toString().replace('.',','), 137, 65);
+        }
     }
 
 
@@ -156,7 +218,7 @@ class SimulationCanvas extends React.Component {
 
 // Source: https://stackoverflow.com/a/26080467
 function drawArrow(ctx, fromx, fromy, tox, toy, width, color){
-    if(width === 0) return;
+    if(width <= 0.5) return;
     //variables to be used when creating the arrow
     var headlen = 10;
 
@@ -204,20 +266,23 @@ function getPlanetColor(albedo){
     var intensity = (maxIntensity - minIntensity) * albedo + minIntensity
     return rgb(intensity, intensity, intensity);
 }
-
-function getStellarWidth(stellarRad){
+ 
+function getStellarWidth(){
     //It was decided that the size of the arrow should be fixed since the variation would propagate to other arrows in too large scale
-    const maxWidth = 12
-    const minWidth = 12
+    //const maxWidth = 25
+    //const minWidth = 10
 
     //Get a value between 0 and 1
-    var linearRad = (20*Math.log10(stellarRad)+40)/100
-    var width = (maxWidth - minWidth) * linearRad + minWidth
-    return width.toFixed(2);
+    //var linearRad = (20*Math.log10(stellarRad)+40)/100
+    //var width = (maxWidth - minWidth) * linearRad + minWidth
+    //return width.toFixed(2);
+    return 30;
 }
 
-function getReflectedStellarWidth(stellarRad, albedo){
-   return ((getStellarWidth(stellarRad))*(albedo)).toFixed(2)
+
+function getReflectedStellarWidth(s1, s2, s3, a1, a2, a3, A){
+   return (-4.0*A*(a3*s3 - 2.0*s3 + 2.0)*(2.0*a1*s1 + a2*s2*(a1*s1 - 2.0*s1 + 2.0) - 4.0*s1 - 2.0*s2*(a1*s1 - 2.0*s1 + 2.0) + 4.0)/(A*a1**2*a2**2*a3*s1**2*s2**2*s3 - 4.0*A*a1**2*a2*s1**2*s2 - A*a1**2*a3*s1**2*s3*(a2*s2 - 2.0*s2 + 2.0)**2 - 4.0*A*a1*a2*a3*s1*s2*s3 + 16.0*A*a1*s1 - A*a2**2*a3*s2**2*s3*(a1*s1 - 2.0*s1 + 2.0)**2 + 4.0*A*a2*s2*(a1*s1 - 2.0*s1 + 2.0)**2 + A*a3*s3*(a1*s1 - 2.0*s1 + 2.0)**2*(a2*s2 - 2.0*s2 + 2.0)**2 - 2.0*a1*a2**2*a3*s1*s2**2*s3 + 8.0*a1*a2*s1*s2 + 2.0*a1*a3*s1*s3*(a2*s2 - 2.0*s2 + 2.0)**2 + 8.0*a2*a3*s2*s3 - 32.0))
+   .toFixed(2)
 }
 
 function getLayerWidth(e){
@@ -226,62 +291,78 @@ function getLayerWidth(e){
     return (maxWidth-minWidth) * e + minWidth
 }
 
-function getSurfaceEmissionWidth(temp,s0){
-    // Update: Since at lower insolation the changes in the parameters would not be reflected
-    // on the width of the arrow, I divide by the 4th root of the insolation such that
-    // the value does not depend on it.
-
-    const maxWidth = 23
-    const minWidth = 4
-    temp = temp / Math.pow(s0,(1/4))
-    const maxTemp = getMaxSurfaceTemp() / Math.pow(maxInsolation * 1361 / 4, (1/4));
-    const minTemp = getMinSurfaceTemp() / Math.pow(minInsolation * 1361 / 4, (1/4));
-    temp = (temp < minTemp) ? minTemp : temp;
-    temp = (temp > maxTemp) ? maxTemp : temp;
-
-    // Get a value between 0 and 1
-    const relativeTemp = (temp - minTemp) / (maxTemp - minTemp)
-    return (maxWidth-minWidth ) * relativeTemp + minWidth
+function getSurfaceEmissionWidth(sbc,temp,s0){
+    const relativeWidth = (sbc*Math.pow(temp,4)) / (s0)
+    return relativeWidth*getStellarWidth()
 }
 
-function getLayerAbsorbedEmission(temp, s0, ei){
+function getEscapingSurfaceEmissionWidth(sbc, temp, s0 , ei){
     var emul = (1-ei[0])*(1-ei[1])*(1-ei[2])
-    return getSurfaceEmissionWidth(temp, s0)*(1-emul)
+    return getSurfaceEmissionWidth(sbc,temp,s0)*(emul)
 }
 
-function getEscapingSurfaceEmissionWidth(temp,s0 , ei){
-    var emul = (1-ei[0])*(1-ei[1])*(1-ei[2])
-    return getSurfaceEmissionWidth(temp,s0)*(emul)
+function getAtmosphericRadiationBotWidth(sbc, layerTemps, s0, ei){
+    
+    var t1 = typeof layerTemps[0] === "undefined" ? 0 : layerTemps[0] ;
+    var t2 = typeof layerTemps[1] === "undefined" ? 0 : layerTemps[1] ;
+    var t3 = typeof layerTemps[2] === "undefined" ? 0 : layerTemps[2] ;
+
+    const relativeWidth = (sbc*Math.pow(t1,4)*ei[0]+sbc*Math.pow(t2,4)*ei[1]*(1-ei[0])+sbc*Math.pow(t3,4)*ei[2]*(1-ei[1])*(1-ei[0]))/s0
+    return relativeWidth*getStellarWidth();
 }
 
-function getAtmosphericRadiationTopWidth(layerTemps, ei, s0){
-    const maxWidth = 8
-    const minWidth = 0
+function getAtmosphericRadiationTopWidth(sbc, layerTemps,s0, ei){
+    
+    var t1 = typeof layerTemps[0] === "undefined" ? 0 : layerTemps[0] ;
+    var t2 = typeof layerTemps[1] === "undefined" ? 0 : layerTemps[1] ;
+    var t3 = typeof layerTemps[2] === "undefined" ? 0 : layerTemps[2] ;
 
-    var t1 = typeof layerTemps[0] === "undefined" ? 0 : layerTemps[0] / Math.pow(s0,(1/4));
-    var t2 = typeof layerTemps[1] === "undefined" ? 0 : layerTemps[1] / Math.pow(s0,(1/4));
-    var t3 = typeof layerTemps[2] === "undefined" ? 0 : layerTemps[2] / Math.pow(s0,(1/4));
-
-    var value = Math.pow(t1,1/4)*ei[0]*(1-ei[1])*(1-ei[2]) + Math.pow(t2,1/4)*ei[1]*(1-ei[2]) + Math.pow(t3,1/4)*ei[2]
-    const maxVal = 2.83;
-    const minVal = 0;
-    var relativeVal = (value - minVal) / (maxVal - minVal)
-    return (maxWidth-minWidth) * relativeVal+minWidth;
+    const relativeWidth = (sbc*Math.pow(t1,4)*ei[0]*(1-ei[1])*(1-ei[2])+sbc*Math.pow(t2,4)*ei[1]*(1-ei[2])+sbc*Math.pow(t3,4)*ei[2])/s0
+    return relativeWidth*getStellarWidth();
 }
 
-function getAtmosphericRadiationBotWidth(layerTemps,ei, s0){
-    const maxWidth = 8
-    const minWidth = 0
+//which is just u3 (same as the factor)
+function getEffectiveAlbedo(tfi,s1,s2,s3,a1,a2,a3,A){
+    
+    if (tfi[0] === 0) {
+        return u0 (s1,s2,s3,a1,a2,a3,A)
+    }
+    else if (tfi[1] === 0) {
+        return u1 (s1,s2,s3,a1,a2,a3,A)
+    }
+    else if (tfi[2] === 0) {
+        return u2 (s1,s2,s3,a1,a2,a3,A)
+    }
+    else {
+        return u3 (s1,s2,s3,a1,a2,a3,A)
+    }
 
-    var t1 = typeof layerTemps[0] === "undefined" ? 0 : layerTemps[0] / Math.pow(s0,(1/4));
-    var t2 = typeof layerTemps[1] === "undefined" ? 0 : layerTemps[1] / Math.pow(s0,(1/4));
-    var t3 = typeof layerTemps[2] === "undefined" ? 0 : layerTemps[2] / Math.pow(s0,(1/4));
-
-    var value = Math.pow(t1,1/4)*ei[0] + Math.pow(t2,1/4)*ei[1]*(1-ei[0]) + Math.pow(t3,1/4)*ei[2]*(1-ei[1])*(1-ei[0])
-    const maxVal = 3.04
-    const minVal = 0;
-    var relativeVal = (value - minVal) / (maxVal - minVal)
-    return (maxWidth-minWidth) * relativeVal+minWidth;
 }
 
-export default SimulationCanvas
+//returns d1
+function getAtmToGroundWidthFactor (s1, s2, s3, a1, a2, a3,A){
+    return (-4.0*(a3*s3 - 2.0*s3 + 2.0)*(2.0*a1*s1 + a2*s2*(a1*s1 - 2.0*s1 + 2.0) - 4.0*s1 - 2.0*s2*(a1*s1 - 2.0*s1 + 2.0) + 4.0)/(A*a1**2*a2**2*a3*s1**2*s2**2*s3 - 4.0*A*a1**2*a2*s1**2*s2 - A*a1**2*a3*s1**2*s3*(a2*s2 - 2.0*s2 + 2.0)**2 - 4.0*A*a1*a2*a3*s1*s2*s3 + 16.0*A*a1*s1 - A*a2**2*a3*s2**2*s3*(a1*s1 - 2.0*s1 + 2.0)**2 + 4.0*A*a2*s2*(a1*s1 - 2.0*s1 + 2.0)**2 + A*a3*s3*(a1*s1 - 2.0*s1 + 2.0)**2*(a2*s2 - 2.0*s2 + 2.0)**2 - 2.0*a1*a2**2*a3*s1*s2**2*s3 + 8.0*a1*a2*s1*s2 + 2.0*a1*a3*s1*s3*(a2*s2 - 2.0*s2 + 2.0)**2 + 8.0*a2*a3*s2*s3 - 32.0))
+
+}
+
+function u0 (s1, s2, s3, a1, a2, a3, A){
+    return (-4.0*A*(a3*s3 - 2.0*s3 + 2.0)*(2.0*a1*s1 + a2*s2*(a1*s1 - 2.0*s1 + 2.0) - 4.0*s1 - 2.0*s2*(a1*s1 - 2.0*s1 + 2.0) + 4.0)/(A*a1**2*a2**2*a3*s1**2*s2**2*s3 - 4.0*A*a1**2*a2*s1**2*s2 - A*a1**2*a3*s1**2*s3*(a2*s2 - 2.0*s2 + 2.0)**2 - 4.0*A*a1*a2*a3*s1*s2*s3 + 16.0*A*a1*s1 - A*a2**2*a3*s2**2*s3*(a1*s1 - 2.0*s1 + 2.0)**2 + 4.0*A*a2*s2*(a1*s1 - 2.0*s1 + 2.0)**2 + A*a3*s3*(a1*s1 - 2.0*s1 + 2.0)**2*(a2*s2 - 2.0*s2 + 2.0)**2 - 2.0*a1*a2**2*a3*s1*s2**2*s3 + 8.0*a1*a2*s1*s2 + 2.0*a1*a3*s1*s3*(a2*s2 - 2.0*s2 + 2.0)**2 + 8.0*a2*a3*s2*s3 - 32.0))
+
+}
+
+function u1 (s1, s2, s3, a1, a2, a3, A){
+    return (-2.0*(a3*s3 - 2.0*s3 + 2.0)*(-A*a1**2*a2*s1**2*s2 + 2.0*A*a1**2*s1**2*s2 - 2.0*A*a1**2*s1**2 + 2.0*A*a1*s1*(a1*s1 - 2.0*s1 + 2.0) + 4.0*A*a1*s1 + A*a2*s2*(a1*s1 - 2.0*s1 + 2.0)**2 - 4.0*A*s1*(a1*s1 - 2.0*s1 + 2.0) - 8.0*A*s1 - 2.0*A*s2*(a1*s1 - 2.0*s1 + 2.0)**2 + 8.0*A + 2.0*a1*a2*s1*s2 - 4.0*a1*s1*s2 + 4.0*a1*s1)/(A*a1**2*a2**2*a3*s1**2*s2**2*s3 - 4.0*A*a1**2*a2*s1**2*s2 - A*a1**2*a3*s1**2*s3*(a2*s2 - 2.0*s2 + 2.0)**2 - 4.0*A*a1*a2*a3*s1*s2*s3 + 16.0*A*a1*s1 - A*a2**2*a3*s2**2*s3*(a1*s1 - 2.0*s1 + 2.0)**2 + 4.0*A*a2*s2*(a1*s1 - 2.0*s1 + 2.0)**2 + A*a3*s3*(a1*s1 - 2.0*s1 + 2.0)**2*(a2*s2 - 2.0*s2 + 2.0)**2 - 2.0*a1*a2**2*a3*s1*s2**2*s3 + 8.0*a1*a2*s1*s2 + 2.0*a1*a3*s1*s3*(a2*s2 - 2.0*s2 + 2.0)**2 + 8.0*a2*a3*s2*s3 - 32.0))
+
+}
+
+function u2 (s1, s2, s3, a1, a2, a3, A){
+    return (-(a3*s3 - 2.0*s3 + 2.0)*(A*a1**2*a2**2*s1**2*s2**2 - A*a1**2*a2*s1**2*s2*(a2*s2 - 2.0*s2 + 2.0) - 2.0*A*a1**2*a2*s1**2*s2 + 2.0*A*a1**2*s1**2*s2*(a2*s2 - 2.0*s2 + 2.0) + 4.0*A*a1**2*s1**2*s2 - 4.0*A*a1**2*s1**2 - 4.0*A*a1*a2*s1*s2 + 4.0*A*a1*s1*(a1*s1 - 2.0*s1 + 2.0) + 8.0*A*a1*s1 - A*a2**2*s2**2*(a1*s1 - 2.0*s1 + 2.0)**2 + A*a2*s2*(a1*s1 - 2.0*s1 + 2.0)**2*(a2*s2 - 2.0*s2 + 2.0) + 2.0*A*a2*s2*(a1*s1 - 2.0*s1 + 2.0)**2 - 8.0*A*s1*(a1*s1 - 2.0*s1 + 2.0) - 16.0*A*s1 - 2.0*A*s2*(a1*s1 - 2.0*s1 + 2.0)**2*(a2*s2 - 2.0*s2 + 2.0) - 4.0*A*s2*(a1*s1 - 2.0*s1 + 2.0)**2 + 16.0*A - 2.0*a1*a2**2*s1*s2**2 + 2.0*a1*a2*s1*s2*(a2*s2 - 2.0*s2 + 2.0) + 4.0*a1*a2*s1*s2 - 4.0*a1*s1*s2*(a2*s2 - 2.0*s2 + 2.0) - 8.0*a1*s1*s2 + 8.0*a1*s1 + 8.0*a2*s2)/(A*a1**2*a2**2*a3*s1**2*s2**2*s3 - 4.0*A*a1**2*a2*s1**2*s2 - A*a1**2*a3*s1**2*s3*(a2*s2 - 2.0*s2 + 2.0)**2 - 4.0*A*a1*a2*a3*s1*s2*s3 + 16.0*A*a1*s1 - A*a2**2*a3*s2**2*s3*(a1*s1 - 2.0*s1 + 2.0)**2 + 4.0*A*a2*s2*(a1*s1 - 2.0*s1 + 2.0)**2 + A*a3*s3*(a1*s1 - 2.0*s1 + 2.0)**2*(a2*s2 - 2.0*s2 + 2.0)**2 - 2.0*a1*a2**2*a3*s1*s2**2*s3 + 8.0*a1*a2*s1*s2 + 2.0*a1*a3*s1*s3*(a2*s2 - 2.0*s2 + 2.0)**2 + 8.0*a2*a3*s2*s3 - 32.0))
+
+}
+
+function u3 (s1, s2, s3, a1, a2, a3, A){
+    return (0.5*(a3*s3*(A*a1**2*a2**2*a3*s1**2*s2**2*s3 - 4.0*A*a1**2*a2*s1**2*s2 - A*a1**2*a3*s1**2*s3*(a2*s2 - 2.0*s2 + 2.0)**2 - 4.0*A*a1*a2*a3*s1*s2*s3 + 16.0*A*a1*s1 - A*a2**2*a3*s2**2*s3*(a1*s1 - 2.0*s1 + 2.0)**2 + 4.0*A*a2*s2*(a1*s1 - 2.0*s1 + 2.0)**2 + A*a3*s3*(a1*s1 - 2.0*s1 + 2.0)**2*(a2*s2 - 2.0*s2 + 2.0)**2 - 2.0*a1*a2**2*a3*s1*s2**2*s3 + 8.0*a1*a2*s1*s2 + 2.0*a1*a3*s1*s3*(a2*s2 - 2.0*s2 + 2.0)**2 + 8.0*a2*a3*s2*s3 - 32.0) - (a3*s3 - 2.0*s3 + 2.0)**2*(A*a1**2*a2**2*s1**2*s2**2 - A*a1**2*s1**2*(a2*s2 - 2.0*s2 + 2.0)**2 - 4.0*A*a1*a2*s1*s2 - A*a2**2*s2**2*(a1*s1 - 2.0*s1 + 2.0)**2 + A*(a1*s1 - 2.0*s1 + 2.0)**2*(a2*s2 - 2.0*s2 + 2.0)**2 - 2.0*a1*a2**2*s1*s2**2 + 2.0*a1*s1*(a2*s2 - 2.0*s2 + 2.0)**2 + 8.0*a2*s2))/(A*a1**2*a2**2*a3*s1**2*s2**2*s3 - 4.0*A*a1**2*a2*s1**2*s2 - A*a1**2*a3*s1**2*s3*(a2*s2 - 2.0*s2 + 2.0)**2 - 4.0*A*a1*a2*a3*s1*s2*s3 + 16.0*A*a1*s1 - A*a2**2*a3*s2**2*s3*(a1*s1 - 2.0*s1 + 2.0)**2 + 4.0*A*a2*s2*(a1*s1 - 2.0*s1 + 2.0)**2 + A*a3*s3*(a1*s1 - 2.0*s1 + 2.0)**2*(a2*s2 - 2.0*s2 + 2.0)**2 - 2.0*a1*a2**2*a3*s1*s2**2*s3 + 8.0*a1*a2*s1*s2 + 2.0*a1*a3*s1*s3*(a2*s2 - 2.0*s2 + 2.0)**2 + 8.0*a2*a3*s2*s3 - 32.0))
+
+}
+
+export default SimulationCanvas;
